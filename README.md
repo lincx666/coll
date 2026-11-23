@@ -45,8 +45,9 @@ iOSApp/                          ← 已 git init + 首次 commit（128 MB 打�
 
 ## 二、怎么构建
 
-**没有 Mac？看 [BUILD_WITHOUT_MAC.md](BUILD_WITHOUT_MAC.md)** —— 走 GitHub Actions
-云编译，全程浏览器操作，产出免签名 `.ipa` / `.tipa`，TrollStore 直接装。
+**没有 Mac？看 [BUILD_WITHOUT_MAC.md](BUILD_WITHOUT_MAC.md)，
+iOS 15.8.8 装 TrollStore 看 [INSTALL_IOS15.md](INSTALL_IOS15.md)** ——
+走 GitHub Actions 云编译，全程浏览器操作，产出免签名 `.ipa`，TrollStore 直接装。
 
 有 Mac 的话：
 
@@ -74,7 +75,7 @@ CODE_SIGNING_ALLOWED = NO
 - 想用 **Xcode 直接装**：把 `CODE_SIGNING_ALLOWED` 改回 `YES`，填上你的开发者证书
 - 模拟器：无需任何签名，直接跑
 
-部署目标 **iOS 17.0**，仅 iPhone 竖屏。
+部署目标 **iOS 15.0**，仅 iPhone 竖屏。（最初写的是 17.0，为了 15.8.8 的机器已经降下来了。）
 
 ---
 

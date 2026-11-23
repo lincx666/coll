@@ -115,5 +115,7 @@ GitHub Actions 只能看到「编译成功/失败」，改代码时没法实时�
 
 1. **GitHub 账号有吗？** 有的话我可以直接把仓库初始化好（`git init` + 首次
    commit），你只需要在网页上建仓库、然后 `git push`。
-2. **iOS 版本？** 工程设的是 17.0 最低，如果手机是 16.x 我要调低。
-3. **TrollStore 装了吗？** 装了走 `.tipa`；没装我用 Sideloadly 的流程写详细点。
+2. **iOS 版本？** 已确认是 15.8.8，部署目标已降到 15.0 —— 见
+   [INSTALL_IOS15.md](INSTALL_IOS15.md)
+3. **TrollStore 装了吗？** 还没有。15.8.8 要选对安装器（TrollInstallerX 不支持
+   这个版本），具体流程也在 [INSTALL_IOS15.md](INSTALL_IOS15.md)。
