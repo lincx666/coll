@@ -3,14 +3,15 @@ import SwiftUI
 struct RootView: View {
     @StateObject private var model = EditorModel()
     @State private var showPicker = false
+    @State private var showCamera = false
 
     var body: some View {
-        // iOS 15 没有 NavigationStack，用 NavigationView + stack 样式。
-        // 目标是 iPhone 单栏，所以 stack 样式不会有 iPad 分栏问题。
         NavigationView {
             Group {
                 if model.originalImage == nil {
-                    EmptyStateView { showPicker = true }
+                    HomeView(model: model,
+                             pickPhoto: { showPicker = true },
+                             openCamera: { showCamera = true })
                 } else {
                     EditorView(model: model, showPicker: $showPicker)
                 }
@@ -18,17 +19,12 @@ struct RootView: View {
             .navigationTitle("Leica Lab")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarLeading) {
-                    if model.originalImage != nil {
-                        Button("换一张") { showPicker = true }
-                    }
-                }
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     if model.originalImage != nil {
                         Button {
                             model.export()
                         } label: {
-                            Label("导出", systemImage: "square.and.arrow.down")
+                            Image(systemName: "square.and.arrow.down")
                         }
                         .disabled(model.isRendering)
                     }
@@ -41,6 +37,9 @@ struct RootView: View {
                 if let image { model.load(image) }
             }
         }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraView(model: model)
+        }
         .alert("提示", isPresented: .init(
             get: { model.exportMessage != nil },
             set: { if !$0 { model.exportMessage = nil } }
@@ -52,32 +51,57 @@ struct RootView: View {
     }
 }
 
-// MARK: - 空态
+// MARK: - 首页
 
-struct EmptyStateView: View {
-    let action: () -> Void
+struct HomeView: View {
+    @ObservedObject var model: EditorModel
+    let pickPhoto: () -> Void
+    let openCamera: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "camera.filters")
-                .font(.system(size: 64, weight: .thin))
-                .foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            Spacer()
 
-            VStack(spacing: 6) {
-                Text("选一张照片开始")
-                    .font(.title3.weight(.medium))
-                Text("655 个 LUT · 9 种相框 · 徕卡水印")
+            VStack(spacing: 10) {
+                Image(systemName: "camera.aperture")
+                    .font(.system(size: 72, weight: .ultraLight))
+                    .foregroundColor(.accentColor)
+
+                Text("Leica Lab")
+                    .font(.title2.weight(.semibold))
+
+                Text("\(model.library.totalFilters) 个滤镜 · 9 种相框")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
 
-            Button(action: action) {
-                Label("从相册选择", systemImage: "photo.on.rectangle")
-                    .padding(.horizontal, 8)
+            Spacer()
+
+            VStack(spacing: 12) {
+                Button(action: openCamera) {
+                    HStack {
+                        Image(systemName: "camera.fill")
+                        Text("拍照")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(action: pickPhoto) {
+                    HStack {
+                        Image(systemName: "photo.on.rectangle")
+                        Text("从相册选")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 48)
         }
-        .padding()
     }
 }

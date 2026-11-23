@@ -79,6 +79,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "读取照片用于添加滤镜与水印"
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "保存处理后的照片到相册"
+        INFOPLIST_KEY_NSCameraUsageDescription: "使用相机拍摄照片并套用滤镜"
 
     info:
       path: LeicaLab/Info.plist

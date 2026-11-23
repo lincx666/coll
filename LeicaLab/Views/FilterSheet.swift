@@ -102,21 +102,21 @@ struct FilterSheet: View {
                 switch tab {
                 case .camera:
                     ForEach(model.library.cameraLUTs) { lut in
-                        cell(name: lut.displayName, key: "lut:\(lut.id)",
+                        cell(name: model.displayName(for: lut), key: "lut:\(lut.id)",
                              isSelected: model.selectedLUT?.id == lut.id) {
                             model.pick(lut: lut)
                         }
                     }
                 case .scene:
                     ForEach(model.library.sceneLUTs) { lut in
-                        cell(name: lut.displayName, key: "lut:\(lut.id)",
+                        cell(name: model.displayName(for: lut), key: "lut:\(lut.id)",
                              isSelected: model.selectedLUT?.id == lut.id) {
                             model.pick(lut: lut)
                         }
                     }
                 case .relens:
                     ForEach(currentHALDs) { hald in
-                        cell(name: hald.displayName, key: "hald:\(hald.id)",
+                        cell(name: model.displayName(for: hald), key: "hald:\(hald.id)",
                              isSelected: model.selectedHALD?.id == hald.id) {
                             model.pick(hald: hald)
                         }
@@ -184,19 +184,19 @@ struct FilterSheet: View {
             for lut in model.library.cameraLUTs {
                 jobs.append(("lut:\(lut.id)", .init(lutFile: lut.id, haldFile: nil,
                                                     intensity: 1, frameFile: nil,
-                                                    filterDisplayName: lut.displayName)))
+                                                    filterDisplayName: model.displayName(for: lut))))
             }
         case .scene:
             for lut in model.library.sceneLUTs {
                 jobs.append(("lut:\(lut.id)", .init(lutFile: lut.id, haldFile: nil,
                                                     intensity: 1, frameFile: nil,
-                                                    filterDisplayName: lut.displayName)))
+                                                    filterDisplayName: model.displayName(for: lut))))
             }
         case .relens:
             for hald in currentHALDs {
                 jobs.append(("hald:\(hald.id)", .init(lutFile: nil, haldFile: hald.file,
                                                       intensity: 1, frameFile: nil,
-                                                      filterDisplayName: hald.displayName)))
+                                                      filterDisplayName: model.displayName(for: hald))))
             }
         }
 

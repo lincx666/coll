@@ -23,13 +23,39 @@ final class EditorModel: ObservableObject {
     @Published var isRendering = false
     @Published var exportMessage: String?
 
-    /// 拖动强度滑块会连发很多次渲染请求，用递增 token 丢弃过期结果，
-    /// 保证总是最后一次请求的图落到界面上。
+    /// 拖动强度滑块会连发很多次渲染请求，用递增 token 丢弃过期结果
     private var renderToken = 0
 
     init() {
         self.library = FilterLibrary(catalog: AppCatalog.load())
     }
+
+    // MARK: - 中文名
+
+    /// LUT 的中文显示名（来自 lut_names_zh.json）
+    func displayName(for lut: LUTEntry) -> String {
+        Self.chineseNames[lut.id] ?? lut.displayName
+    }
+
+    /// HALD 滤镜的中文名就是原包里的名字（本来就是中文）
+    func displayName(for hald: HALDEntry) -> String {
+        hald.displayName
+    }
+
+    /// 当前选中滤镜的显示名
+    var currentFilterName: String {
+        if let hald = selectedHALD { return displayName(for: hald) }
+        if let lut = selectedLUT { return displayName(for: lut) }
+        return ""
+    }
+
+    private static let chineseNames: [String: String] = {
+        guard let url = BundleResource.url(name: "lut_names_zh", ext: "json", subdirectories: ["Resources", nil]),
+              let data = try? Data(contentsOf: url),
+              let map = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return [:] }
+        return map
+    }()
 
     // MARK: - 加载
 
@@ -67,12 +93,6 @@ final class EditorModel: ObservableObject {
         refreshPreview()
     }
 
-    var currentFilterName: String {
-        if let hald = selectedHALD { return hald.displayName }
-        if let lut = selectedLUT { return lut.displayName }
-        return ""
-    }
-
     // MARK: - 渲染
 
     private var settings: RenderPipeline.Settings {
@@ -85,7 +105,6 @@ final class EditorModel: ObservableObject {
         )
     }
 
-    /// 预览：降采样到 1400px 以内，够看又不卡。
     func refreshPreview() {
         guard let original = originalImage else {
             previewImage = nil
@@ -99,11 +118,9 @@ final class EditorModel: ObservableObject {
 
         Task {
             let result = await Task.detached(priority: .userInitiated) {
-                // 尺寸交给 RenderPipeline 按设备内存自适应
                 RenderPipeline().preview(original, settings: settings)
             }.value
 
-            // 期间又发了新请求 → 这次结果作废
             guard token == self.renderToken else { return }
             self.previewImage = result
             self.isRendering = false
@@ -118,32 +135,35 @@ final class EditorModel: ObservableObject {
         isRendering = true
 
         Task {
-            let data = await Task.detached(priority: .userInitiated) { () -> Data? in
-                let full = RenderPipeline().export(original, settings: settings)
-                return full.jpegData(compressionQuality: 0.96)
+            let out = await Task.detached(priority: .userInitiated) {
+                RenderPipeline().export(original, settings: settings)
             }.value
 
             self.isRendering = false
-            if let data {
-                self.saveToPhotos(data)
-            } else {
-                self.exportMessage = "编码失败"
+            self.saveToAlbum(out) { ok, msg in
+                if let msg { self.exportMessage = msg }
+                _ = ok
             }
         }
     }
 
-    private func saveToPhotos(_ data: Data) {
+    /// 存相册。回调在主线程。
+    func saveToAlbum(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
+        guard let data = image.jpegData(compressionQuality: 0.96) else {
+            completion(false, "编码失败")
+            return
+        }
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
-                Task { @MainActor in self.exportMessage = "没有相册写入权限" }
+                DispatchQueue.main.async { completion(false, "没有相册写入权限") }
                 return
             }
             PHPhotoLibrary.shared().performChanges {
                 let req = PHAssetCreationRequest.forAsset()
                 req.addResource(with: .photo, data: data, options: nil)
             } completionHandler: { ok, err in
-                Task { @MainActor in
-                    self.exportMessage = ok ? "已保存到相册 ♪" : (err?.localizedDescription ?? "保存失败")
+                DispatchQueue.main.async {
+                    completion(ok, ok ? "已保存到相册 ♪" : (err?.localizedDescription ?? "保存失败"))
                 }
             }
         }
