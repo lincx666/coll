@@ -9,8 +9,11 @@
 ## 一、目录结构
 
 ```
-iOSApp/
-├── LeicaLab.xcodeproj/          Xcode 工程（脚本生成，可直接打开）
+iOSApp/                          ← 已 git init + 首次 commit（128 MB 打包后）
+├── project.yml                  XcodeGen 规格（CI 用它生成工程）
+├── .github/workflows/           build-ipa.yml：云编译出 .ipa
+├── BUILD_WITHOUT_MAC.md         没有 Mac 怎么装到手机
+├── LeicaLab.xcodeproj/          离线备份（make_project.py 生成）
 ├── LeicaLab/
 │   ├── App/
 │   │   ├── LeicaLabApp.swift    入口
@@ -31,24 +34,32 @@ iOSApp/
 │   ├── Assets.xcassets/         图标
 │   └── Resources/               ← 655 个 LUT + 图标 + 动画 + 音效 + 相框
 ├── prepare_resources.py         从 ios-port 整理资源
-├── make_project.py              生成 pbxproj
+├── make_project.py              生成 pbxproj（离线备份用）
 ├── make_icon.py                 生成图标
 ├── validate_project.py          校验工程完整性
-└── lint_swift.py                Swift 静态粗筛
+├── lint_swift.py                Swift 静态粗筛
+└── check_repo_size.py           仓库体积体检
 ```
 
 ---
 
 ## 二、怎么构建
 
+**没有 Mac？看 [BUILD_WITHOUT_MAC.md](BUILD_WITHOUT_MAC.md)** —— 走 GitHub Actions
+云编译，全程浏览器操作，产出免签名 `.ipa` / `.tipa`，TrollStore 直接装。
+
+有 Mac 的话：
+
 ```bash
 # 1. 确保 Resources 已就位（只用跑一次；改过 ios-port 后可重跑）
 python prepare_resources.py
 
-# 2. 打开工程
-open LeicaLab.xcodeproj
+# 2. 用 XcodeGen 生成工程（推荐，比 make_project.py 手写的可靠）
+brew install xcodegen
+xcodegen generate --spec project.yml
 
-# 3. 选设备，⌘R
+# 3. 打开
+open LeicaLab.xcodeproj
 ```
 
 **签名设置**（`make_project.py` 里已写死成免签名，方便越狱机）：
