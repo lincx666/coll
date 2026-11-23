@@ -1,0 +1,93 @@
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:          # 手动触发
+  push:
+    branches: [main]
+    paths:
+      - "LeicaLab/**"
+      - "project.yml"
+      - ".github/workflows/build-ipa.yml"
+
+jobs:
+  build:
+    name: Build LeicaLab.ipa
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true          # 若资源走 LFS，这里会一并拉下来
+
+      - name: Verify resources
+        run: |
+          set -e
+          R=LeicaLab/Resources
+          echo "LUTs:      $(ls $R/LUTs    2>/dev/null | wc -l | tr -d ' ')"
+          echo "HALD:      $(ls $R/HALD    2>/dev/null | wc -l | tr -d ' ')"
+          echo "Icons:     $(ls $R/Icons   2>/dev/null | wc -l | tr -d ' ')"
+          echo "Lottie:    $(ls $R/Lottie  2>/dev/null | wc -l | tr -d ' ')"
+          echo "Sounds:    $(ls $R/Sounds  2>/dev/null | wc -l | tr -d ' ')"
+          echo "Frames:    $(ls $R/Frames  2>/dev/null | wc -l | tr -d ' ')"
+          echo "Watermarks:$(find $R/Watermarks -type f 2>/dev/null | wc -l | tr -d ' ')"
+          test -f $R/catalog.json || { echo "::error::catalog.json 缺失"; exit 1; }
+          test -d $R/LUTs         || { echo "::error::LUTs 目录缺失"; exit 1; }
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build (Release, unsigned)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project LeicaLab.xcodeproj \
+            -scheme LeicaLab \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_STYLE=Manual \
+            clean build \
+            | tee build.log \
+            | xcbeautify 2>/dev/null || true
+          # 上面 pipe 会吞掉退出码，单独再检查一次
+          if ! grep -q "BUILD SUCCEEDED" build.log; then
+            echo "::error::编译失败，见日志尾部的 error: 行"
+            grep -n "error:" build.log | head -40 || true
+            exit 1
+          fi
+
+      - name: Package as .ipa
+        run: |
+          set -euo pipefail
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          echo "APP=$APP"
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          # TrollStore 也认 .tipa，两个都出
+          zip -qry LeicaLab.ipa Payload
+          cp LeicaLab.ipa LeicaLab.tipa
+          du -h LeicaLab.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: LeicaLab-ipa
+          path: |
+            LeicaLab.ipa
+            LeicaLab.tipa
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7

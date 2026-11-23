@@ -1,0 +1,89 @@
+# XcodeGen 工程描述。
+#
+# 用它在 macOS（或 GitHub Actions）上生成 .xcodeproj：
+#     xcodegen generate
+#
+# 比手写 pbxproj 可靠得多 —— make_project.py 生成的那份可以留着做离线备份，
+# 但 CI 上走 XcodeGen 这条路。
+
+name: LeicaLab
+
+options:
+  bundleIdPrefix: com.local
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # 免签名：产物是未签名的 .app，交给 TrollStore / Sideloadly 自签
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  LeicaLab:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+
+    sources:
+      # 源代码：按目录递归收 .swift
+      - path: LeicaLab
+        excludes:
+          - "Resources/**"
+          - "Assets.xcassets/**"
+
+      # 资源目录：用 folder reference（蓝色文件夹），
+      # 整体原样拷进 .app，不走 Xcode 的逐文件扁平化。
+      - path: LeicaLab/Resources/LUTs
+        type: folder
+      - path: LeicaLab/Resources/HALD
+        type: folder
+      - path: LeicaLab/Resources/Icons
+        type: folder
+      - path: LeicaLab/Resources/Lottie
+        type: folder
+      - path: LeicaLab/Resources/Sounds
+        type: folder
+      - path: LeicaLab/Resources/Frames
+        type: folder
+      - path: LeicaLab/Resources/Watermarks
+        type: folder
+
+      # catalog.json 保持普通文件引用
+      - path: LeicaLab/Resources/catalog.json
+
+      # 图标
+      - path: LeicaLab/Assets.xcassets
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.local.leicalab
+        PRODUCT_NAME: LeicaLab
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTED_PLATFORMS: "iphoneos"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "Leica Lab"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "读取照片用于添加滤镜与水印"
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "保存处理后的照片到相册"
+
+    info:
+      path: LeicaLab/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait

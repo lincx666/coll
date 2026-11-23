@@ -1,0 +1,28 @@
+# 二进制资源用 LFS（可选）。
+
+# 默认策略：全部按二进制处理，避免 git 尝试做文本 diff
+* text=auto eol=lf
+*.swift   text eol=lf
+*.yml     text eol=lf
+*.md      text eol=lf
+*.py      text eol=lf
+*.json    text eol=lf
+*.plist   text eol=lf
+
+*.bin     binary
+*.png     binary
+*.jpg     binary
+*.webp    binary
+*.wav     binary
+*.svg     text
+*.otf     binary
+*.ttf     binary
+
+# ---- 若要启用 Git LFS（推荐，见 README「仓库体积」一节）----
+# 删掉下面各行开头的 '#'，再执行：
+#   git lfs install
+#   git lfs track "LeicaLab/Resources/LUTs/*.bin"
+#   git lfs track "LeicaLab/Resources/HALD/*.png"
+#
+# LeicaLab/Resources/LUTs/*.bin   filter=lfs diff=lfs merge=lfs -text
+# LeicaLab/Resources/HALD/*.png   filter=lfs diff=lfs merge=lfs -text
