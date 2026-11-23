@@ -76,8 +76,10 @@ enum PhotoMetadata {
                     : "1/" + String(Int((1.0 / t).rounded()))
             }
 
+            // ISOSpeedRatings 是主键；老照片可能只有 PhotographicSensitivity，
+            // 那个常量在部分 SDK 里没有，直接用字符串键兜底。
             for key in [kCGImagePropertyExifISOSpeedRatings,
-                        kCGImagePropertyExifPhotographicSensitivity] {
+                        CFString("PhotographicSensitivity")] {
                 if let arr = exif[key] as? [Int], let v = arr.first {
                     info.iso = "ISO \(v)"
                     break

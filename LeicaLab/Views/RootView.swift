@@ -18,11 +18,13 @@ struct RootView: View {
             .navigationTitle("Leica Lab")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if model.originalImage != nil {
-                    ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItemGroup(placement: .navigationBarLeading) {
+                    if model.originalImage != nil {
                         Button("换一张") { showPicker = true }
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                }
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    if model.originalImage != nil {
                         Button {
                             model.export()
                         } label: {
