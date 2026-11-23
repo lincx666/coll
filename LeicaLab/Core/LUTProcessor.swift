@@ -6,7 +6,7 @@ import UIKit
 /// 两种来源：
 /// - **33³ `.bin`**：直接喂 `CIColorCubeWithColorSpace`，一条 GPU 滤镜搞定。
 /// - **64³ HALD PNG**：先在 CPU 侧解成 float 立方体，再走同一个滤镜。
-///   （iOS 的 `CIColorCube` 只吃 data 不吃图，所以 HALD 必须解一次；结果会缓存。）
+///   解一次后缓存（每个 64³ 立方体约 1 MB，不能缓存太多）。
 ///
 /// 用 `CIColorCubeWithColorSpace` 而不是 `CIColorCube`，因为前者能显式指定
 /// 输入色彩空间，否则暗部和高光会偏。
@@ -21,7 +21,20 @@ final class LUTProcessor: @unchecked Sendable {
         let working = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)
             ?? CGColorSpaceCreateDeviceRGB()
         context = CIContext(options: [.workingColorSpace: working])
-        cache.countLimit = 24      // 33³ ≈ 575 KB/个，24 个约 14 MB
+
+        // 2 GB 设备（SE 一代）把缓存压到 6 个，其余 16 个。
+        // 33³ ≈ 575 KB/个，64³ ≈ 1 MB/个，再加上 CIContext 自己的缓存，
+        // 小内存设备上很吃紧。
+        let constrained = ProcessInfo.processInfo.physicalMemory < 3 * 1024 * 1024 * 1024
+        cache.countLimit = constrained ? 6 : 16
+        cache.totalCostLimit = constrained ? 8 * 1024 * 1024 : 24 * 1024 * 1024
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.cache.removeAllObjects()
+        }
     }
 
     // MARK: - 滤镜构造
@@ -31,8 +44,8 @@ final class LUTProcessor: @unchecked Sendable {
         let key = ("bin:" + name) as NSString
         if let hit = cache.object(forKey: key) { return hit }
 
-        guard let url = BundleResource.lut(name),
-              let data = try? Data(contentsOf: url) else { return nil }
+        guard let url = BundleResource.lut(name) else { return nil }
+        guard let data = Self.memoryMappedData(at: url) else { return nil }
 
         let expected = dimension * dimension * dimension * 4 * MemoryLayout<Float>.size
         guard data.count == expected else {
@@ -41,7 +54,8 @@ final class LUTProcessor: @unchecked Sendable {
         }
 
         guard let filter = Self.makeCubeFilter(dimension: dimension, data: data) else { return nil }
-        cache.setObject(filter, forKey: key)
+        // cost 按字节算，配合 totalCostLimit
+        cache.setObject(filter, forKey: key, cost: data.count)
         return filter
     }
 
@@ -57,7 +71,7 @@ final class LUTProcessor: @unchecked Sendable {
               let filter = Self.makeCubeFilter(dimension: 64, data: data)
         else { return nil }
 
-        cache.setObject(filter, forKey: key)
+        cache.setObject(filter, forKey: key, cost: data.count)
         return filter
     }
 
@@ -67,6 +81,16 @@ final class LUTProcessor: @unchecked Sendable {
         filter.setValue(data, forKey: "inputCubeData")
         filter.setValue(CGColorSpace(name: CGColorSpace.sRGB)!, forKey: "inputColorSpace")
         return filter
+    }
+
+    /// 用 memory-mapped 读取：575 KB 的 LUT 不必整个复制进堆，
+    /// 2 GB 设备上能省不少峰值内存。
+    private static func memoryMappedData(at url: URL) -> Data? {
+        if let mapped = try? Data(contentsOf: url, options: .alwaysMapped),
+           mapped.count > 0 {
+            return mapped
+        }
+        return try? Data(contentsOf: url)
     }
 
     // MARK: - HALD 解码

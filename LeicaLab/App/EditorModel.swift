@@ -99,7 +99,8 @@ final class EditorModel: ObservableObject {
 
         Task {
             let result = await Task.detached(priority: .userInitiated) {
-                RenderPipeline().preview(original, settings: settings, maxDimension: 1400)
+                // 尺寸交给 RenderPipeline 按设备内存自适应
+                RenderPipeline().preview(original, settings: settings)
             }.value
 
             // 期间又发了新请求 → 这次结果作废

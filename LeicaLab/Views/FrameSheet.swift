@@ -6,10 +6,15 @@ struct FrameSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var previews: [String: UIImage] = [:]
 
+    private var isCompactScreen: Bool {
+        UIScreen.main.bounds.width < 360
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: isCompactScreen ? 130 : 150),
+                                             spacing: 12)], spacing: 12) {
                     // 无相框
                     card(id: "__none__", name: "无相框",
                          isSelected: model.selectedFrame == nil) {
@@ -53,7 +58,7 @@ struct FrameSheet: View {
                         ProgressView().scaleEffect(0.6)
                     }
                 }
-                .frame(height: 130)
+                .frame(height: isCompactScreen ? 110 : 130)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2.5)

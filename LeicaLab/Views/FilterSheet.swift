@@ -81,9 +81,16 @@ struct FilterSheet: View {
 
     // MARK: - 网格
 
+    /// SE 一代只有 320pt 宽，96pt 一列会挤成 3 列且字被截断。
+    /// 用紧凑档位把格子压到 84pt，留出边距。
+    private var isCompactScreen: Bool {
+        UIScreen.main.bounds.width < 360
+    }
+
     private var scrollContent: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: isCompactScreen ? 78 : 96), spacing: 8)],
+                      spacing: 8) {
                 if tab == .camera {
                     cell(name: "原色", key: "identity",
                          isSelected: model.selectedLUT == nil && model.selectedHALD == nil) {
@@ -143,7 +150,7 @@ struct FilterSheet: View {
                         ProgressView().scaleEffect(0.6)
                     }
                 }
-                .frame(height: 74)
+                .frame(height: isCompactScreen ? 62 : 74)
                 // iOS 15 用 overlay(_:alignment:) 而不是 overlay { }
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
@@ -162,11 +169,14 @@ struct FilterSheet: View {
     // MARK: - 缩略图
 
     /// 用当前照片的极小副本批量套 LUT，打开面板时一次算完。
+    ///
+    /// 小内存设备（SE 一代）上，一次算 116 张缩略图会爆内存 ——
+    /// 所以按设备分两批，算完一批再算下一批，中间 GC 一次。
     private func buildThumbnails() {
         guard !building, let source = model.originalImage else { return }
         building = true
 
-        let tiny = RenderPipeline.downscale(source, maxDimension: 180)
+        let tiny = RenderPipeline.downscale(source, maxDimension: 160)
         var jobs: [(key: String, settings: RenderPipeline.Settings)] = []
 
         switch tab {
@@ -191,16 +201,26 @@ struct FilterSheet: View {
         }
 
         let pipeline = RenderPipeline()
+        let constrained = RenderPipeline.isConstrainedDevice
+        let batchSize = constrained ? 8 : 32
+
         Task.detached(priority: .userInitiated) {
-            var result: [String: UIImage] = [:]
-            for job in jobs {
-                result[job.key] = pipeline.export(tiny, settings: job.settings)
+            var index = 0
+            while index < jobs.count {
+                let end = min(index + batchSize, jobs.count)
+                var result: [String: UIImage] = [:]
+                for job in jobs[index..<end] {
+                    result[job.key] = pipeline.export(tiny, settings: job.settings)
+                }
+                let snapshot = result
+                await MainActor.run {
+                    self.thumbnails.merge(snapshot) { _, new in new }
+                }
+                index = end
+                // 小内存设备给系统一点回收时间
+                if constrained { try? await Task.sleep(nanoseconds: 30_000_000) }
             }
-            let snapshot = result
-            await MainActor.run {
-                self.thumbnails.merge(snapshot) { _, new in new }
-                self.building = false
-            }
+            await MainActor.run { self.building = false }
         }
     }
 }
