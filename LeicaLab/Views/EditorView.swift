@@ -34,7 +34,9 @@ struct EditorView: View {
                     Spacer()
                     ProgressView()
                         .padding(10)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .background(
+                            Capsule().fill(Color.black.opacity(0.35))
+                        )
                         .padding(.bottom, 16)
                 }
             }
@@ -60,16 +62,17 @@ struct EditorView: View {
                 HStack(spacing: 12) {
                     Text("强度")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                     Slider(value: $model.intensity, in: 0...1) { editing in
                         if !editing { model.refreshPreview() }
                     }
                     Text("\(Int(model.intensity * 100))%")
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                         .frame(width: 40, alignment: .trailing)
                 }
-                .onChange(of: model.intensity) { _, _ in
+                // iOS 15 的 onChange 是单参数版本
+                .onChange(of: model.intensity) { _ in
                     model.refreshPreview()
                 }
             }
@@ -102,7 +105,7 @@ struct EditorView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .background(Color(UIColor.secondarySystemBackground))
         .sheet(item: $sheet) { kind in
             switch kind {
             case .filters:
@@ -120,8 +123,11 @@ struct EditorView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(filled ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12),
-                    in: Capsule())
-        .foregroundStyle(filled ? Color.accentColor : Color.secondary)
+        .background(
+            Capsule().fill(filled
+                           ? Color.accentColor.opacity(0.2)
+                           : Color.secondary.opacity(0.12))
+        )
+        .foregroundColor(filled ? Color.accentColor : Color.secondary)
     }
 }

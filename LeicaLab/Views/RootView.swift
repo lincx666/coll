@@ -5,7 +5,9 @@ struct RootView: View {
     @State private var showPicker = false
 
     var body: some View {
-        NavigationStack {
+        // iOS 15 没有 NavigationStack，用 NavigationView + stack 样式。
+        // 目标是 iPhone 单栏，所以 stack 样式不会有 iPad 分栏问题。
+        NavigationView {
             Group {
                 if model.originalImage == nil {
                     EmptyStateView { showPicker = true }
@@ -17,10 +19,10 @@ struct RootView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if model.originalImage != nil {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .navigationBarLeading) {
                         Button("换一张") { showPicker = true }
                     }
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
                             model.export()
                         } label: {
@@ -31,6 +33,7 @@ struct RootView: View {
                 }
             }
         }
+        .navigationViewStyle(.stack)
         .sheet(isPresented: $showPicker) {
             PhotoPicker { image in
                 if let image { model.load(image) }
@@ -56,14 +59,14 @@ struct EmptyStateView: View {
         VStack(spacing: 24) {
             Image(systemName: "camera.filters")
                 .font(.system(size: 64, weight: .thin))
-                .foregroundStyle(.secondary)
+                .foregroundColor(.secondary)
 
             VStack(spacing: 6) {
                 Text("选一张照片开始")
                     .font(.title3.weight(.medium))
                 Text("655 个 LUT · 9 种相框 · 徕卡水印")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             }
 
             Button(action: action) {

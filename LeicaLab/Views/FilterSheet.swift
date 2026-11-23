@@ -19,7 +19,7 @@ struct FilterSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: 0) {
                 Picker("", selection: $tab) {
                     ForEach(Tab.allCases) { t in Text(t.rawValue).tag(t) }
@@ -35,7 +35,7 @@ struct FilterSheet: View {
             .navigationTitle("选滤镜")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("完成") { dismiss() }
                 }
             }
@@ -45,9 +45,10 @@ struct FilterSheet: View {
                 }
                 buildThumbnails()
             }
-            .onChange(of: tab) { _, _ in buildThumbnails() }
-            .onChange(of: category) { _, _ in buildThumbnails() }
+            .onChange(of: tab) { _ in buildThumbnails() }
+            .onChange(of: category) { _ in buildThumbnails() }
         }
+        .navigationViewStyle(.stack)
     }
 
     // MARK: - 分类横条
@@ -63,13 +64,14 @@ struct FilterSheet: View {
                             .font(.caption.weight(category == c.name ? .semibold : .regular))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(category == c.name
-                                        ? Color.accentColor.opacity(0.25)
-                                        : Color.secondary.opacity(0.12),
-                                        in: Capsule())
+                            .background(
+                                Capsule().fill(category == c.name
+                                               ? Color.accentColor.opacity(0.25)
+                                               : Color.secondary.opacity(0.12))
+                            )
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(category == c.name ? Color.accentColor : .secondary)
+                    .foregroundColor(category == c.name ? Color.accentColor : .secondary)
                 }
             }
             .padding(.horizontal, 16)
@@ -142,15 +144,16 @@ struct FilterSheet: View {
                     }
                 }
                 .frame(height: 74)
-                .overlay {
+                // iOS 15 用 overlay(_:alignment:) 而不是 overlay { }
+                .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2.5)
-                }
+                        .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2.5)
+                )
 
                 Text(name)
                     .font(.caption2)
                     .lineLimit(1)
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .foregroundColor(isSelected ? Color.accentColor : .secondary)
             }
         }
         .buttonStyle(.plain)
@@ -170,20 +173,20 @@ struct FilterSheet: View {
         case .camera:
             for lut in model.library.cameraLUTs {
                 jobs.append(("lut:\(lut.id)", .init(lutFile: lut.id, haldFile: nil,
-                                                   intensity: 1, frameFile: nil,
-                                                   filterDisplayName: lut.displayName)))
+                                                    intensity: 1, frameFile: nil,
+                                                    filterDisplayName: lut.displayName)))
             }
         case .scene:
             for lut in model.library.sceneLUTs {
                 jobs.append(("lut:\(lut.id)", .init(lutFile: lut.id, haldFile: nil,
-                                                   intensity: 1, frameFile: nil,
-                                                   filterDisplayName: lut.displayName)))
+                                                    intensity: 1, frameFile: nil,
+                                                    filterDisplayName: lut.displayName)))
             }
         case .relens:
             for hald in currentHALDs {
                 jobs.append(("hald:\(hald.id)", .init(lutFile: nil, haldFile: hald.file,
-                                                     intensity: 1, frameFile: nil,
-                                                     filterDisplayName: hald.displayName)))
+                                                      intensity: 1, frameFile: nil,
+                                                      filterDisplayName: hald.displayName)))
             }
         }
 

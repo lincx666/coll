@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// 相框选择：横向卡片，每张卡片是 **用当前照片真的渲染一遍** 的结果。
+/// 相框选择：网格卡片，每张都是 **用当前照片真的渲染一遍** 的结果。
 struct FrameSheet: View {
     @ObservedObject var model: EditorModel
     @Environment(\.dismiss) private var dismiss
     @State private var previews: [String: UIImage] = [:]
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                     // 无相框
@@ -28,15 +28,17 @@ struct FrameSheet: View {
             .navigationTitle("选相框")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("完成") { dismiss() }
                 }
             }
             .onAppear { buildPreviews() }
         }
+        .navigationViewStyle(.stack)
     }
 
-    private func card(id: String, name: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func card(id: String, name: String, isSelected: Bool,
+                      action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 6) {
                 ZStack {
@@ -52,15 +54,15 @@ struct FrameSheet: View {
                     }
                 }
                 .frame(height: 130)
-                .overlay {
+                .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2.5)
-                }
+                        .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2.5)
+                )
 
                 Text(name)
                     .font(.caption)
                     .lineLimit(1)
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .foregroundColor(isSelected ? Color.accentColor : .secondary)
             }
         }
         .buttonStyle(.plain)

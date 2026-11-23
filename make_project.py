@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
-"""生成 Xcode 工程文件（project.pbxproj）。
-
-手写 pbxproj 很容易错，这里用一个极简生成器：只支持「单 target、文件夹引用并进资源」，
-够本工程用。生成后用 `open LeicaLab.xcodeproj` 即可。
-"""
+﻿# -*- coding: utf-8 -*-
+"""鐢熸垚 Xcode 宸ョ▼鏂囦欢锛坧roject.pbxproj锛夈€?
+鎵嬪啓 pbxproj 寰堝鏄撻敊锛岃繖閲岀敤涓€涓瀬绠€鐢熸垚鍣細鍙敮鎸併€屽崟 target銆佹枃浠跺す寮曠敤骞惰繘璧勬簮銆嶏紝
+澶熸湰宸ョ▼鐢ㄣ€傜敓鎴愬悗鐢?`open LeicaLab.xcodeproj` 鍗冲彲銆?"""
 import sys, os, hashlib, json
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -12,7 +10,7 @@ ROOT = r"C:\Users\lincx\Documents\deepseek-harness\default-workspace\iOSApp"
 APP = os.path.join(ROOT, "LeicaLab")
 PROJ = os.path.join(ROOT, "LeicaLab.xcodeproj")
 
-# ---------- 收集源文件 ----------
+# ---------- 鏀堕泦婧愭枃浠?----------
 
 def rel(p):
     return os.path.relpath(p, ROOT).replace('\\', '/')
@@ -35,7 +33,7 @@ for sub in ("LUTs", "HALD", "Icons", "Lottie", "Sounds", "Frames", "Watermarks")
 if os.path.exists(os.path.join(APP, "Resources", "catalog.json")):
     resources.append("LeicaLab/Resources/catalog.json")
 
-# ---------- 稳定 ID ----------
+# ---------- 绋冲畾 ID ----------
 
 def oid(seed):
     return hashlib.md5(seed.encode()).hexdigest()[:24].upper()
@@ -63,7 +61,7 @@ CONFIG_DEBUG_TARGET = oid("configdebugtarget")
 CONFIG_RELEASE_TARGET = oid("configreleasetarget")
 PRODUCT_REF = oid("productref")
 
-# ---------- pbxproj 片段 ----------
+# ---------- pbxproj 鐗囨 ----------
 
 def file_ref_lines():
     out = []
@@ -90,9 +88,9 @@ def build_file_lines():
     return "\n".join(out)
 
 def app_group_children():
-    """LeicaLab 组下的子组与文件"""
+    """LeicaLab 缁勪笅鐨勫瓙缁勪笌鏂囦欢"""
     lines = []
-    # 子目录按路径深度排序
+    # 瀛愮洰褰曟寜璺緞娣卞害鎺掑簭
     dirs = sorted({os.path.dirname(p) for p in swift_files})
     top_dirs = sorted({d.split('/')[1] for d in dirs if len(d.split('/')) > 1})
 
@@ -295,7 +293,7 @@ pbxproj = f'''// !$*UTF8*$!
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -312,7 +310,7 @@ pbxproj = f'''// !$*UTF8*$!
 				COPY_PHASE_STRIP = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -331,8 +329,8 @@ pbxproj = f'''// !$*UTF8*$!
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Leica Lab";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "保存处理后的照片到相册";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "读取照片用于添加滤镜与水印";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "淇濆瓨澶勭悊鍚庣殑鐓х墖鍒扮浉鍐?;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "璇诲彇鐓х墖鐢ㄤ簬娣诲姞婊ら暅涓庢按鍗?;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -361,8 +359,8 @@ pbxproj = f'''// !$*UTF8*$!
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Leica Lab";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "保存处理后的照片到相册";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "读取照片用于添加滤镜与水印";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "淇濆瓨澶勭悊鍚庣殑鐓х墖鍒扮浉鍐?;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "璇诲彇鐓х墖鐢ㄤ簬娣诲姞婊ら暅涓庢按鍗?;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -417,3 +415,4 @@ print(json.dumps({
     "pbxproj_bytes": len(pbxproj),
     "path": os.path.join(PROJ, "project.pbxproj"),
 }, ensure_ascii=False, indent=1))
+
