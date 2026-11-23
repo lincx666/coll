@@ -1,5 +1,6 @@
 import CoreImage
 import UIKit
+import Metal
 
 /// 把 APK 里扒出来的 LUT 应用成图像。
 ///
@@ -10,6 +11,16 @@ import UIKit
 ///
 /// 用 `CIColorCubeWithColorSpace` 而不是 `CIColorCube`，因为前者能显式指定
 /// 输入色彩空间，否则暗部和高光会偏。
+///
+/// ── 关于 `CIContext` 的线程问题（踩过的坑）──
+/// iOS 15 上 `CIContext(options:)` 会去建一个 OpenGL ES 上下文，
+/// 而 EAGL 上下文必须在主线程创建。如果在 `Task.detached` 里第一次访问
+/// 单例（懒加载），就会在后台线程建 GL 上下文，直接 `EXC_BAD_ACCESS`
+/// 段错误。
+///
+/// 所以这里：
+/// 1. 显式用 Metal 设备建 `CIContext`（不走 GL 路径）
+/// 2. 提供 `warmUp()`，由 App 启动时在主线程调一次
 final class LUTProcessor: @unchecked Sendable {
 
     static let shared = LUTProcessor()
@@ -18,13 +29,23 @@ final class LUTProcessor: @unchecked Sendable {
     private let cache = NSCache<NSString, CIFilter>()
 
     private init() {
+        // 优先 Metal：A9（iPhone SE 一代）也支持 Metal，
+        // 且 Metal 的 CIContext 是线程安全的，可以在任意线程创建。
         let working = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)
             ?? CGColorSpaceCreateDeviceRGB()
-        context = CIContext(options: [.workingColorSpace: working])
+
+        if let device = MTLCreateSystemDefaultDevice() {
+            context = CIContext(mtlDevice: device, options: [.workingColorSpace: working])
+        } else {
+            // 兜底：软件渲染，慢但不会崩
+            context = CIContext(options: [
+                .workingColorSpace: working,
+                .useSoftwareRenderer: true,
+            ])
+        }
 
         // 2 GB 设备（SE 一代）把缓存压到 6 个，其余 16 个。
-        // 33³ ≈ 575 KB/个，64³ ≈ 1 MB/个，再加上 CIContext 自己的缓存，
-        // 小内存设备上很吃紧。
+        // 33³ ≈ 575 KB/个，64³ ≈ 1 MB/个。
         let constrained = ProcessInfo.processInfo.physicalMemory < 3 * 1024 * 1024 * 1024
         cache.countLimit = constrained ? 6 : 16
         cache.totalCostLimit = constrained ? 8 * 1024 * 1024 : 24 * 1024 * 1024
@@ -35,6 +56,16 @@ final class LUTProcessor: @unchecked Sendable {
         ) { [weak self] _ in
             self?.cache.removeAllObjects()
         }
+    }
+
+    // MARK: - 预热
+
+    /// 在**主线程**调一次，把 `CIContext` 建好。
+    ///
+    /// iOS 15 上 `CIContext` 的初始化路径会碰 OpenGL，必须在主线程完成。
+    /// App 启动时调用，之后后台线程才能安全访问 `shared`。
+    static func warmUp() {
+        _ = shared.context
     }
 
     // MARK: - 滤镜构造
@@ -151,5 +182,10 @@ final class LUTProcessor: @unchecked Sendable {
 
     func cgImage(from image: CIImage) -> CGImage? {
         context.createCGImage(image, from: image.extent)
+    }
+
+    /// 在指定范围渲染（柔焦背景用，需要比原图大一圈）
+    func render(_ image: CIImage, extent: CGRect) -> CGImage? {
+        context.createCGImage(image, from: extent)
     }
 }

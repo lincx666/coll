@@ -369,6 +369,9 @@ final class FrameRenderer: @unchecked Sendable {
     // MARK: - 辅助
 
     /// 柔焦边框：把原图放大铺满 + 高斯模糊当底色
+    ///
+    /// 注意：这里不能临时 `CIContext()` —— iOS 15 上会在后台线程建 GL 上下文，
+    /// 直接段错误。统一走 `LUTProcessor.shared` 里那个 Metal 上下文。
     private func drawBlurredBackdrop(_ cg: CGImage, in gc: CGContext,
                                      rect: CGRect, radius: CGFloat) {
         guard let blur = CIFilter(name: "CIGaussianBlur") else { return }
@@ -377,7 +380,7 @@ final class FrameRenderer: @unchecked Sendable {
         blur.setValue(radius, forKey: kCIInputRadiusKey)
 
         guard let out = blur.outputImage,
-              let blurred = CIContext().createCGImage(out, from: src.extent) else { return }
+              let blurred = LUTProcessor.shared.render(out, extent: src.extent) else { return }
 
         gc.saveGState()
         gc.clip(to: rect)
