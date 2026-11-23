@@ -23,6 +23,14 @@ final class EditorModel: ObservableObject {
     @Published var isRendering = false
     @Published var exportMessage: String?
 
+    /// 滤镜缩略图缓存：LUT id → 用测试色块渲染出来的小图。
+    ///
+    /// 放在 Model 里而不是 View 的 @State，是因为生成是异步的，
+    /// 放在 struct 的 @State 里容易被闭包捕获成快照，写不回去。
+    @Published private(set) var thumbnails: [String: UIImage] = [:]
+    private var thumbTask: Task<Void, Never>?
+    private static let swatchCache = NSCache<NSString, UIImage>()
+
     /// 拖动强度滑块会连发很多次渲染请求，用递增 token 丢弃过期结果
     private var renderToken = 0
 
@@ -56,6 +64,81 @@ final class EditorModel: ObservableObject {
         else { return [:] }
         return map
     }()
+
+    // MARK: - 缩略图
+
+    /// 96×96 彩色测试块（肤色 + 天空 + 绿叶 + 暖红 + 灰阶）
+    static func swatch() -> UIImage {
+        if let hit = swatchCache.object(forKey: "swatch") { return hit }
+
+        let size = CGSize(width: 96, height: 96)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let img = UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            let gc = ctx.cgContext
+            let cols: [UIColor] = [
+                UIColor(red: 0.82, green: 0.65, blue: 0.52, alpha: 1),
+                UIColor(red: 0.35, green: 0.55, blue: 0.78, alpha: 1),
+                UIColor(red: 0.28, green: 0.48, blue: 0.26, alpha: 1),
+                UIColor(red: 0.72, green: 0.32, blue: 0.26, alpha: 1),
+            ]
+            let w = size.width / CGFloat(cols.count)
+            for (i, c) in cols.enumerated() {
+                gc.setFillColor(c.cgColor)
+                gc.fill(CGRect(x: CGFloat(i) * w, y: 0, width: w, height: size.height * 0.66))
+            }
+            for i in 0..<8 {
+                let g = CGFloat(i) / 7.0
+                gc.setFillColor(UIColor(white: g, alpha: 1).cgColor)
+                gc.fill(CGRect(x: CGFloat(i) * size.width / 8,
+                               y: size.height * 0.66,
+                               width: size.width / 8,
+                               height: size.height * 0.34))
+            }
+        }
+        swatchCache.setObject(img, forKey: "swatch")
+        return img
+    }
+
+    func thumbnail(for lut: LUTEntry) -> UIImage? {
+        thumbnails[lut.id]
+    }
+
+    /// 逐个生成缩略图，算完一个就发一个，UI 能看着陆续出现。
+    ///
+    /// 之前的写法是「全部算完一次性赋值」，116 个 LUT 在 A9 上要十几秒，
+    /// 表现就是一直转圈。
+    func ensureThumbnails(for luts: [LUTEntry]) {
+        thumbTask?.cancel()
+
+        let need = luts.filter { thumbnails[$0.id] == nil }
+        guard !need.isEmpty else { return }
+
+        let base = Self.swatch()
+
+        thumbTask = Task { [weak self] in
+            for lut in need {
+                if Task.isCancelled { return }
+
+                let image: UIImage? = await Task.detached(priority: .userInitiated) {
+                    RenderPipeline().export(base, settings: .init(
+                        lutFile: lut.id, haldFile: nil, intensity: 1,
+                        frameFile: nil, filterDisplayName: ""
+                    ))
+                }.value
+
+                if Task.isCancelled { return }
+                guard let self, let image else { continue }
+                await MainActor.run { self.thumbnails[lut.id] = image }
+            }
+        }
+    }
+
+    func cancelThumbnails() {
+        thumbTask?.cancel()
+        thumbTask = nil
+    }
 
     // MARK: - 加载
 

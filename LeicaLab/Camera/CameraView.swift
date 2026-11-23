@@ -11,11 +11,10 @@ struct CameraView: View {
 
     @State private var captured: PhotoBox?
     @State private var showFilterStrip = true
-    @State private var filterTab: FilterTab = .camera
-    @State private var thumbnails: [String: UIImage] = [:]
+    @State private var filterTab: FilterTab = .brand
 
     enum FilterTab: String, CaseIterable, Identifiable {
-        case camera = "相机"
+        case brand = "品牌"
         case film = "胶片"
         var id: String { rawValue }
     }
@@ -42,8 +41,14 @@ struct CameraView: View {
                 bottomBar
             }
         }
-        .onAppear { camera.requestAndStart() }
-        .onDisappear { camera.stop() }
+        .onAppear {
+            camera.requestAndStart()
+            model.ensureThumbnails(for: currentLUTs)
+        }
+        .onDisappear {
+            camera.stop()
+            model.cancelThumbnails()
+        }
         .statusBar(hidden: true)
         .sheet(item: $captured) { box in
             CapturedPhotoView(image: box.image, model: model) { dismiss() }
@@ -66,10 +71,11 @@ struct CameraView: View {
 
             Spacer()
 
-            if let lut = model.selectedLUT {
-                Text(model.displayName(for: lut))
+            if model.selectedLUT != nil || model.selectedHALD != nil {
+                Text(model.currentFilterName)
                     .font(.caption.weight(.medium))
                     .foregroundColor(.white)
+                    .lineLimit(1)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Color.black.opacity(0.45)))
@@ -100,7 +106,6 @@ struct CameraView: View {
             }
 
             HStack {
-                // 左：切换滤镜面板
                 Button {
                     withAnimation { showFilterStrip.toggle() }
                 } label: {
@@ -113,7 +118,6 @@ struct CameraView: View {
 
                 Spacer()
 
-                // 中：快门
                 Button {
                     shoot()
                 } label: {
@@ -128,14 +132,13 @@ struct CameraView: View {
 
                 Spacer()
 
-                // 右：占位，保持快门居中
                 Color.clear.frame(width: 52, height: 52)
             }
             .padding(.horizontal, 32)
         }
         .padding(.bottom, 24)
         .background(
-            LinearGradient(colors: [.clear, .black.opacity(0.6)],
+            LinearGradient(colors: [.clear, .black.opacity(0.7)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea(edges: .bottom)
         )
@@ -147,12 +150,15 @@ struct CameraView: View {
                 ForEach(FilterTab.allCases) { t in Text(t.rawValue).tag(t) }
             }
             .pickerStyle(.segmented)
-            .frame(width: 200)
+            .frame(width: 180)
+            .onChange(of: filterTab) { _ in
+                model.ensureThumbnails(for: currentLUTs)
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    // 原色
-                    filterCell(name: "原色", key: "none", selected: model.selectedLUT == nil) {
+                    filterCell(name: "原色", key: nil,
+                               selected: model.selectedLUT == nil && model.selectedHALD == nil) {
                         model.pick(lut: nil)
                         model.pick(hald: nil)
                     }
@@ -168,19 +174,24 @@ struct CameraView: View {
                 .padding(.horizontal, 16)
             }
         }
-        .onChange(of: filterTab) { _ in buildThumbs() }
-        .onAppear { buildThumbs() }
     }
 
-    private func filterCell(name: String, key: String, selected: Bool,
+    private func filterCell(name: String, key: String?, selected: Bool,
                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.white.opacity(0.15))
-                    if let t = thumbnails[key] {
+
+                    if let key, let t = model.thumbnails[key] {
                         Image(uiImage: t)
+                            .resizable()
+                            .scaledToFill()
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else if key == nil {
+                        // 「原色」：直接用测试块
+                        Image(uiImage: EditorModel.swatch())
                             .resizable()
                             .scaledToFill()
                             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -206,69 +217,18 @@ struct CameraView: View {
 
     // MARK: - 数据
 
-    /// 相机 tab 只放相机/胶片那批，排除 247 个 AI 场景
+    /// 品牌 tab：机内 LUT（哈苏/徕卡/宾得/理光/富士/柯达…），排除 log 还原和视频仿色
+    /// 胶片 tab：cameralook 那 23 个风格 tone
     private var currentLUTs: [LUTEntry] {
-        let all = model.library.cameraLUTs.filter {
-            $0.group == "camera" && !$0.id.hasPrefix("lut_")
-        }
+        let all = model.library.cameraLUTs.filter { $0.group == "camera" }
         switch filterTab {
-        case .camera:
-            return all.filter { !$0.id.hasPrefix("log_") }
+        case .brand:
+            return all.filter {
+                !$0.id.hasPrefix("log_") && !$0.id.hasPrefix("fengwei_")
+                    && !$0.id.hasPrefix("cameralook_")
+            }
         case .film:
-            return all.filter { $0.id.hasPrefix("log_") || $0.id.count < 12 }
-        }
-    }
-
-    /// 缩略图：拿不到相机画面就先用纯色块占位，成本低。
-    private func buildThumbs() {
-        let luts = currentLUTs
-        let pipeline = RenderPipeline()
-        // 一个 96×96 的渐变测试块，能看出色调差异
-        let base = Self.swatch()
-        let pwd = model
-
-        Task.detached(priority: .userInitiated) {
-            var out: [String: UIImage] = [:]
-            for lut in luts {
-                let s = RenderPipeline.Settings(lutFile: lut.id, haldFile: nil,
-                                                intensity: 1, frameFile: nil,
-                                                filterDisplayName: "")
-                out[lut.id] = pipeline.export(base, settings: s)
-            }
-            _ = pwd
-            let snap = out
-            await MainActor.run { self.thumbnails.merge(snap) { _, n in n } }
-        }
-    }
-
-    /// 96×96 彩色测试块（肤色 + 天空 + 绿叶 + 灰阶）
-    static func swatch() -> UIImage {
-        let size = CGSize(width: 96, height: 96)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
-            let gc = ctx.cgContext
-            let cols: [UIColor] = [
-                UIColor(red: 0.82, green: 0.65, blue: 0.52, alpha: 1),   // 肤色
-                UIColor(red: 0.35, green: 0.55, blue: 0.78, alpha: 1),   // 天空
-                UIColor(red: 0.28, green: 0.48, blue: 0.26, alpha: 1),   // 绿叶
-                UIColor(red: 0.72, green: 0.32, blue: 0.26, alpha: 1),   // 暖红
-            ]
-            let w = size.width / CGFloat(cols.count)
-            for (i, c) in cols.enumerated() {
-                gc.setFillColor(c.cgColor)
-                gc.fill(CGRect(x: CGFloat(i) * w, y: 0, width: w, height: size.height * 0.66))
-            }
-            // 底部灰阶
-            for i in 0..<8 {
-                let g = CGFloat(i) / 7.0
-                gc.setFillColor(UIColor(white: g, alpha: 1).cgColor)
-                gc.fill(CGRect(x: CGFloat(i) * size.width / 8,
-                               y: size.height * 0.66,
-                               width: size.width / 8,
-                               height: size.height * 0.34))
-            }
+            return all.filter { $0.id.hasPrefix("cameralook_") }
         }
     }
 
@@ -276,7 +236,11 @@ struct CameraView: View {
 
     private func shoot() {
         camera.capture { image in
-            if let image { captured = PhotoBox(image: image) }
+            guard let image else {
+                model.exportMessage = "拍照失败，请重试"
+                return
+            }
+            captured = PhotoBox(image: image)
         }
     }
 
@@ -287,11 +251,9 @@ struct CameraView: View {
             Image(systemName: "camera.slash")
                 .font(.system(size: 48, weight: .thin))
                 .foregroundColor(.white)
-            Text("没有相机权限")
-                .foregroundColor(.white)
+            Text("没有相机权限").foregroundColor(.white)
             Text("去 设置 → 隐私 → 相机，允许 Leica Lab")
-                .font(.caption)
-                .foregroundColor(.gray)
+                .font(.caption).foregroundColor(.gray)
                 .multilineTextAlignment(.center)
             Button("去设置") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
