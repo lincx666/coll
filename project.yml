@@ -87,3 +87,16 @@ targets:
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+
+# 显式声明 scheme：
+# xcodebuild 用 -derivedDataPath 时必须配 -scheme（不能用 -target），
+# 而 XcodeGen 默认不生成 scheme，所以要在这里写出来。
+schemes:
+  LeicaLab:
+    build:
+      targets:
+        LeicaLab: all
+    run:
+      config: Release
+    archive:
+      config: Release

@@ -45,7 +45,7 @@ jobs:
           set -o pipefail
           xcodebuild \
             -project LeicaLab.xcodeproj \
-            -target LeicaLab \
+            -scheme LeicaLab \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -54,7 +54,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_STYLE=Manual \
-            clean build \
+            build \
             2>&1 | tee build.log
 
       - name: Check build result
