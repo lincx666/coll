@@ -45,9 +45,15 @@ iOSApp/                          ← 已 git init + 首次 commit（128 MB 打�
 
 ## 二、怎么构建
 
-**没有 Mac？看 [BUILD_WITHOUT_MAC.md](BUILD_WITHOUT_MAC.md)，
-iOS 15.8.8 装 TrollStore 看 [INSTALL_IOS15.md](INSTALL_IOS15.md)** ——
-走 GitHub Actions 云编译，全程浏览器操作，产出免签名 `.ipa`，TrollStore 直接装。
+**没有 Mac？看 [BUILD_WITHOUT_MAC.md](BUILD_WITHOUT_MAC.md)。**
+
+按你的手机情况选装法：
+
+| 你的情况 | 看哪份 |
+|---|---|
+| **palera1n 已越狱**（iPhone SE 一代 / iOS 15.8.8） | **[INSTALL_APPINST.md](INSTALL_APPINST.md)** ← 最省事 |
+| 没越狱，能装 TrollStore | [INSTALL_IOS15.md](INSTALL_IOS15.md) 路线 A |
+| 什么都没装 | [INSTALL_IOS15.md](INSTALL_IOS15.md) |
 
 有 Mac 的话：
 

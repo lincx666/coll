@@ -42,24 +42,30 @@ jobs:
 
       - name: Build (Release, unsigned)
         run: |
-          set -euo pipefail
+          set -o pipefail
           xcodebuild \
             -project LeicaLab.xcodeproj \
-            -scheme LeicaLab \
+            -target LeicaLab \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_STYLE=Manual \
             clean build \
-            | tee build.log \
-            | xcbeautify 2>/dev/null || true
-          # 上面 pipe 会吞掉退出码，单独再检查一次
+            2>&1 | tee build.log
+
+      - name: Check build result
+        if: always()
+        run: |
           if ! grep -q "BUILD SUCCEEDED" build.log; then
-            echo "::error::编译失败，见日志尾部的 error: 行"
-            grep -n "error:" build.log | head -40 || true
+            echo "::error::编译失败"
+            echo "---- error: 行 ----"
+            grep -n "error:" build.log | head -60 || echo "(没有 error: 行)"
+            echo "---- 日志尾部 ----"
+            tail -80 build.log
             exit 1
           fi
 
@@ -67,21 +73,32 @@ jobs:
         run: |
           set -euo pipefail
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::找不到 .app 产物"
+            ls -R build/Build/Products 2>/dev/null | head -40
+            exit 1
+          fi
           echo "APP=$APP"
+          echo "体积: $(du -sh "$APP" | cut -f1)"
+
+          # 确认资源真的进包了
+          echo "--- bundle 内资源目录 ---"
+          ls "$APP" | head -30
+          for d in LUTs HALD Icons Lottie Sounds Frames Watermarks; do
+            n=$(find "$APP/$d" -type f 2>/dev/null | wc -l | tr -d ' ')
+            echo "  $d: $n 个文件"
+          done
+
           rm -rf Payload && mkdir Payload
           cp -R "$APP" Payload/
-          # TrollStore 也认 .tipa，两个都出
           zip -qry LeicaLab.ipa Payload
-          cp LeicaLab.ipa LeicaLab.tipa
           du -h LeicaLab.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: LeicaLab-ipa
-          path: |
-            LeicaLab.ipa
-            LeicaLab.tipa
+          path: LeicaLab.ipa
           retention-days: 30
 
       - name: Upload build log on failure
