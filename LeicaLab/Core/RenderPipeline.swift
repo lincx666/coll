@@ -1,13 +1,13 @@
 import UIKit
-import CoreImage
 
 /// 完整出图管线：LUT → 相框 → 导出。
 ///
 /// 预览和导出走**同一条**管线，只是尺寸不同，所见即所得。
 ///
 /// 针对小内存设备（iPhone SE 一代 2 GB、A9）做了自适应：
-/// - 预览尺寸按屏幕像素算，不是写死的 1400
+/// - 预览尺寸按屏幕像素算
 /// - 超大图导出前先限幅，避免 2 GB 设备 OOM
+/// - LUT 全程 CPU 运算（这台机器上 CoreImage 会崩，见 LUTProcessor 注释）
 final class RenderPipeline: @unchecked Sendable {
 
     struct Settings: Equatable, Sendable {
@@ -25,21 +25,20 @@ final class RenderPipeline: @unchecked Sendable {
 
     /// 小内存设备：预览和导出都要更保守
     static var isConstrainedDevice: Bool {
-        ProcessInfo.processInfo.physicalMemory < 3 * 1024 * 1024 * 1024   // < 3 GB
+        ProcessInfo.processInfo.physicalMemory < 3 * 1024 * 1024 * 1024
     }
 
-    /// 预览最长边：按屏幕像素算（再乘一点余量），不写死
+    /// 预览最长边：按屏幕像素算
     static var previewMaxDimension: CGFloat {
         let screen = UIScreen.main
         let pixelLongest = max(screen.bounds.width, screen.bounds.height) * screen.scale
-        // 小屏设备给 1.0 倍，大屏给到 1.25 倍，避免过度渲染
         let factor: CGFloat = isConstrainedDevice ? 1.0 : 1.25
         return min(2400, max(900, pixelLongest * factor))
     }
 
-    /// 导出最长边上限。2 GB 设备上 8000px 很容易 OOM。
+    /// 导出最长边上限。CPU LUT 是逐像素运算，A9 上不宜太大。
     static var exportMaxDimension: CGFloat {
-        isConstrainedDevice ? 4000 : 8000
+        isConstrainedDevice ? 3000 : 6000
     }
 
     // MARK: - 入口
@@ -52,7 +51,6 @@ final class RenderPipeline: @unchecked Sendable {
     }
 
     func export(_ image: UIImage, settings: Settings) -> UIImage {
-        // 超大原图先限幅：SE 上 1200 万像素原图 + CIColorCube 中间缓冲会爆内存
         let capped = Self.downscale(image, maxDimension: Self.exportMaxDimension)
         return render(capped, settings: settings)
     }
@@ -78,21 +76,14 @@ final class RenderPipeline: @unchecked Sendable {
     }
 
     private func applyLUT(_ image: UIImage, settings: Settings) -> UIImage? {
-        guard let cg = image.cgImage else { return nil }
-
-        var filter: CIFilter?
+        var cube: LUTProcessor.Cube?
         if let bin = settings.lutFile {
-            filter = processor.colorCube(named: bin)
+            cube = processor.cube(named: bin)
         } else if let hald = settings.haldFile {
-            filter = processor.colorCube(hald: hald)
+            cube = processor.cube(hald: hald)
         }
-        guard let filter else { return nil }
-
-        // 统一到 sRGB，避免 P3 素材被二次解释
-        let src = CIImage(cgImage: cg, options: [.colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!])
-        let out = processor.apply(filter, to: src, intensity: settings.intensity)
-        guard let result = processor.cgImage(from: out) else { return nil }
-        return UIImage(cgImage: result, scale: 1, orientation: .up)
+        guard let cube else { return nil }
+        return processor.apply(cube, to: image, intensity: settings.intensity)
     }
 
     // MARK: - 工具

@@ -1,54 +1,42 @@
-import CoreImage
 import UIKit
-import Metal
+import CoreGraphics
 
-/// 把 APK 里扒出来的 LUT 应用成图像。
+/// 把 LUT 应用到图像上 —— **纯 CPU 实现，不依赖 CoreImage**。
 ///
-/// 两种来源：
-/// - **33³ `.bin`**：直接喂 `CIColorCubeWithColorSpace`，一条 GPU 滤镜搞定。
-/// - **64³ HALD PNG**：先在 CPU 侧解成 float 立方体，再走同一个滤镜。
-///   解一次后缓存（每个 64³ 立方体约 1 MB，不能缓存太多）。
+/// ── 为什么不用 CIContext ──
+/// 在这台越狱的 iPhone SE（A9 / iOS 15.8.8）上，`CIContext` 初始化时会在
+/// `CI::GLContext::GLContext` 里对空指针解引用，直接 `EXC_BAD_ACCESS`。
+/// 即使指定 `mtlDevice:` 也会走 `-[CIContext initWithOptions:]`，
+/// 说明 `MTLCreateSystemDefaultDevice()` 在这套环境里返回 nil，
+/// 于是回落到 EAGL 路径并崩溃。
 ///
-/// 用 `CIColorCubeWithColorSpace` 而不是 `CIColorCube`，因为前者能显式指定
-/// 输入色彩空间，否则暗部和高光会偏。
-///
-/// ── 关于 `CIContext` 的线程问题（踩过的坑）──
-/// iOS 15 上 `CIContext(options:)` 会去建一个 OpenGL ES 上下文，
-/// 而 EAGL 上下文必须在主线程创建。如果在 `Task.detached` 里第一次访问
-/// 单例（懒加载），就会在后台线程建 GL 上下文，直接 `EXC_BAD_ACCESS`
-/// 段错误。
-///
-/// 所以这里：
-/// 1. 显式用 Metal 设备建 `CIContext`（不走 GL 路径）
-/// 2. 提供 `warmUp()`，由 App 启动时在主线程调一次
+/// 结论：这台机器上 CoreImage 用不了。改成 CPU 三线性插值，
+/// 慢一点但绝对不崩。
 final class LUTProcessor: @unchecked Sendable {
 
     static let shared = LUTProcessor()
 
-    private let context: CIContext
-    private let cache = NSCache<NSString, CIFilter>()
+    /// 一个 3D LUT，数据是 `dim³ × 3` 的 8bit RGB，r 变化最快。
+    struct Cube {
+        let dim: Int
+        let data: [UInt8]          // dim^3 * 3 字节
+
+        var byteCount: Int { data.count }
+    }
+
+    private let cache = NSCache<NSString, Box>()
+
+    /// NSCache 只收 class
+    private final class Box {
+        let cube: Cube
+        init(_ c: Cube) { cube = c }
+    }
 
     private init() {
-        // 优先 Metal：A9（iPhone SE 一代）也支持 Metal，
-        // 且 Metal 的 CIContext 是线程安全的，可以在任意线程创建。
-        let working = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)
-            ?? CGColorSpaceCreateDeviceRGB()
-
-        if let device = MTLCreateSystemDefaultDevice() {
-            context = CIContext(mtlDevice: device, options: [.workingColorSpace: working])
-        } else {
-            // 兜底：软件渲染，慢但不会崩
-            context = CIContext(options: [
-                .workingColorSpace: working,
-                .useSoftwareRenderer: true,
-            ])
-        }
-
-        // 2 GB 设备（SE 一代）把缓存压到 6 个，其余 16 个。
-        // 33³ ≈ 575 KB/个，64³ ≈ 1 MB/个。
+        // 2 GB 设备（SE 一代）压到 4 个。33³×3 ≈ 108 KB，64³×3 ≈ 768 KB。
         let constrained = ProcessInfo.processInfo.physicalMemory < 3 * 1024 * 1024 * 1024
-        cache.countLimit = constrained ? 6 : 16
-        cache.totalCostLimit = constrained ? 8 * 1024 * 1024 : 24 * 1024 * 1024
+        cache.countLimit = constrained ? 4 : 12
+        cache.totalCostLimit = constrained ? 4 * 1024 * 1024 : 16 * 1024 * 1024
 
         NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
@@ -58,79 +46,65 @@ final class LUTProcessor: @unchecked Sendable {
         }
     }
 
-    // MARK: - 预热
+    // MARK: - 加载
 
-    /// 在**主线程**调一次，把 `CIContext` 建好。
-    ///
-    /// iOS 15 上 `CIContext` 的初始化路径会碰 OpenGL，必须在主线程完成。
-    /// App 启动时调用，之后后台线程才能安全访问 `shared`。
-    static func warmUp() {
-        _ = shared.context
-    }
-
-    // MARK: - 滤镜构造
-
-    /// 33³ `.bin` → CIFilter
-    func colorCube(named name: String, dimension: Int = 33) -> CIFilter? {
+    /// 33³ `.bin`（float32 RGBA 立方体）→ Cube
+    func cube(named name: String, dimension: Int = 33) -> Cube? {
         let key = ("bin:" + name) as NSString
-        if let hit = cache.object(forKey: key) { return hit }
+        if let hit = cache.object(forKey: key) { return hit.cube }
 
-        guard let url = BundleResource.lut(name) else { return nil }
-        guard let data = Self.memoryMappedData(at: url) else { return nil }
+        guard let url = BundleResource.lut(name),
+              let raw = try? Data(contentsOf: url) else { return nil }
 
         let expected = dimension * dimension * dimension * 4 * MemoryLayout<Float>.size
-        guard data.count == expected else {
-            assertionFailure("LUT \(name) 尺寸不符：\(data.count) != \(expected)")
+        guard raw.count == expected else {
+            assertionFailure("LUT \(name) 尺寸不符：\(raw.count) != \(expected)")
             return nil
         }
 
-        guard let filter = Self.makeCubeFilter(dimension: dimension, data: data) else { return nil }
-        // cost 按字节算，配合 totalCostLimit
-        cache.setObject(filter, forKey: key, cost: data.count)
-        return filter
+        // float32 RGBA → UInt8 RGB
+        var out = [UInt8](repeating: 0, count: dimension * dimension * dimension * 3)
+        raw.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
+            let floats = ptr.bindMemory(to: Float.self)
+            var src = 0
+            var dst = 0
+            let n = dimension * dimension * dimension
+            for _ in 0..<n {
+                let r = max(0, min(1, floats[src]))
+                let g = max(0, min(1, floats[src + 1]))
+                let b = max(0, min(1, floats[src + 2]))
+                out[dst]     = UInt8((r * 255).rounded())
+                out[dst + 1] = UInt8((g * 255).rounded())
+                out[dst + 2] = UInt8((b * 255).rounded())
+                src += 4
+                dst += 3
+            }
+        }
+
+        let cube = Cube(dim: dimension, data: out)
+        cache.setObject(Box(cube), forKey: key, cost: out.count)
+        return cube
     }
 
-    /// 64³ HALD PNG → CIFilter（解一次后缓存）
-    func colorCube(hald fileName: String) -> CIFilter? {
+    /// 64³ HALD PNG → Cube
+    func cube(hald fileName: String) -> Cube? {
         let key = ("hald:" + fileName) as NSString
-        if let hit = cache.object(forKey: key) { return hit }
+        if let hit = cache.object(forKey: key) { return hit.cube }
 
         guard let url = BundleResource.hald(fileName),
               let image = UIImage(contentsOfFile: url.path),
               let cg = image.cgImage,
-              let data = Self.haldToCubeData(cg, level: 64),
-              let filter = Self.makeCubeFilter(dimension: 64, data: data)
-        else { return nil }
+              let cube = Self.haldToCube(cg, level: 64) else { return nil }
 
-        cache.setObject(filter, forKey: key, cost: data.count)
-        return filter
+        cache.setObject(Box(cube), forKey: key, cost: cube.byteCount)
+        return cube
     }
 
-    private static func makeCubeFilter(dimension: Int, data: Data) -> CIFilter? {
-        guard let filter = CIFilter(name: "CIColorCubeWithColorSpace") else { return nil }
-        filter.setValue(NSNumber(value: dimension), forKey: "inputCubeDimension")
-        filter.setValue(data, forKey: "inputCubeData")
-        filter.setValue(CGColorSpace(name: CGColorSpace.sRGB)!, forKey: "inputColorSpace")
-        return filter
-    }
-
-    /// 用 memory-mapped 读取：575 KB 的 LUT 不必整个复制进堆，
-    /// 2 GB 设备上能省不少峰值内存。
-    private static func memoryMappedData(at url: URL) -> Data? {
-        if let mapped = try? Data(contentsOf: url, options: .alwaysMapped),
-           mapped.count > 0 {
-            return mapped
-        }
-        return try? Data(contentsOf: url)
-    }
-
-    // MARK: - HALD 解码
-
-    /// 512×512 HALD（8×8 个 64×64 slice）→ 64³ float RGBA 立方体
+    /// 512×512 HALD（8×8 个 64×64 slice）→ 64³ RGB 立方体
     ///
     /// APK 里的排布：slice 内 (x = r, y = g)，slice 序号 = b，
     /// slice 按 `b % 8` 决定列、`b / 8` 决定行。
-    static func haldToCubeData(_ image: CGImage, level: Int) -> Data? {
+    static func haldToCube(_ image: CGImage, level: Int) -> Cube? {
         let w = image.width, h = image.height
         guard w == level * 8, h == level * 8 else { return nil }
 
@@ -144,9 +118,7 @@ final class LUTProcessor: @unchecked Sendable {
         else { return nil }
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
 
-        var cube = [Float](repeating: 0, count: level * level * level * 4)
-        let inv = Float(1.0 / 255.0)
-
+        var out = [UInt8](repeating: 0, count: level * level * level * 3)
         for b in 0..<level {
             let sliceX = (b % 8) * level
             let sliceY = (b / 8) * level
@@ -154,38 +126,134 @@ final class LUTProcessor: @unchecked Sendable {
                 let row = (sliceY + g) * w * 4
                 for r in 0..<level {
                     let o = row + (sliceX + r) * 4
-                    let dst = ((b * level + g) * level + r) * 4
-                    cube[dst + 0] = Float(raw[o + 0]) * inv
-                    cube[dst + 1] = Float(raw[o + 1]) * inv
-                    cube[dst + 2] = Float(raw[o + 2]) * inv
-                    cube[dst + 3] = 1.0
+                    let dst = ((b * level + g) * level + r) * 3
+                    out[dst]     = raw[o]
+                    out[dst + 1] = raw[o + 1]
+                    out[dst + 2] = raw[o + 2]
                 }
             }
         }
-
-        return cube.withUnsafeBufferPointer { Data(buffer: $0) }
+        return Cube(dim: level, data: out)
     }
 
     // MARK: - 应用
 
-    /// `intensity` 0…1，用 `CIMix` 在原图和滤镜结果之间插值。
-    func apply(_ filter: CIFilter, to image: CIImage, intensity: Double = 1.0) -> CIImage {
-        guard let output = filter.outputImage?.cropped(to: image.extent) else { return image }
-        guard intensity < 0.999 else { return output }
+    /// 对整张图做三线性插值。`intensity` 0…1 控制混合比例。
+    func apply(_ cube: Cube, to image: UIImage, intensity: Double = 1.0) -> UIImage {
+        guard let cg = image.cgImage else { return image }
 
-        guard let mix = CIFilter(name: "CIMix") else { return output }
-        mix.setValue(image, forKey: kCIInputBackgroundImageKey)
-        mix.setValue(output, forKey: kCIInputImageKey)
-        mix.setValue(intensity, forKey: "inputAmount")
-        return mix.outputImage?.cropped(to: image.extent) ?? output
-    }
+        let w = cg.width, h = cg.height
+        guard w > 0, h > 0 else { return image }
 
-    func cgImage(from image: CIImage) -> CGImage? {
-        context.createCGImage(image, from: image.extent)
-    }
+        // 统一成 RGBA8 sRGB，方向信息在绘制时被烘焙进去
+        let bytesPerRow = w * 4
+        var src = [UInt8](repeating: 0, count: bytesPerRow * h)
+        guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(
+                data: &src, width: w, height: h, bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow, space: cs,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return image }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
 
-    /// 在指定范围渲染（柔焦背景用，需要比原图大一圈）
-    func render(_ image: CIImage, extent: CGRect) -> CGImage? {
-        context.createCGImage(image, from: extent)
+        let dim = cube.dim
+        let last = dim - 1
+        // 0…255 → 0…last 的定点缩放（16.16）
+        let scaleFix = (last << 16) / 255
+        let blend = max(0.0, min(1.0, intensity))
+        let blendFix = Int(blend * 256)
+
+        src.withUnsafeMutableBufferPointer { buf in
+            guard let p = buf.baseAddress else { return }
+            cube.data.withUnsafeBufferPointer { lut in
+                guard let L = lut.baseAddress else { return }
+
+                let plane = dim * dim * 3
+                let rowStride = dim * 3
+
+                for y in 0..<h {
+                    var idx = y * bytesPerRow
+                    for _ in 0..<w {
+                        let r = Int(p[idx])
+                        let g = Int(p[idx + 1])
+                        let b = Int(p[idx + 2])
+
+                        let fr = r * scaleFix
+                        let fg = g * scaleFix
+                        let fb = b * scaleFix
+
+                        let r0 = fr >> 16, g0 = fg >> 16, b0 = fb >> 16
+                        let r1 = r0 < last ? r0 + 1 : last
+                        let g1 = g0 < last ? g0 + 1 : last
+                        let b1 = b0 < last ? b0 + 1 : last
+                        let tr = fr & 0xFFFF, tg = fg & 0xFFFF, tb = fb & 0xFFFF
+                        let itr = 0x10000 - tr, itg = 0x10000 - tg, itb = 0x10000 - tb
+
+                        // 8 个角
+                        let o000 = (b0 * plane) + (g0 * rowStride) + (r0 * 3)
+                        let o100 = (b0 * plane) + (g0 * rowStride) + (r1 * 3)
+                        let o010 = (b0 * plane) + (g1 * rowStride) + (r0 * 3)
+                        let o110 = (b0 * plane) + (g1 * rowStride) + (r1 * 3)
+                        let o001 = (b1 * plane) + (g0 * rowStride) + (r0 * 3)
+                        let o101 = (b1 * plane) + (g0 * rowStride) + (r1 * 3)
+                        let o011 = (b1 * plane) + (g1 * rowStride) + (r0 * 3)
+                        let o111 = (b1 * plane) + (g1 * rowStride) + (r1 * 3)
+
+                        // 三线性插值（整数运算，最后统一右移）
+                        var nr = 0, ng = 0, nb = 0
+                        nr = Int(L[o000]) * itr * itg * itb
+                           + Int(L[o100]) * tr  * itg * itb
+                           + Int(L[o010]) * itr * tg  * itb
+                           + Int(L[o110]) * tr  * tg  * itb
+                           + Int(L[o001]) * itr * itg * tb
+                           + Int(L[o101]) * tr  * itg * tb
+                           + Int(L[o011]) * itr * tg  * tb
+                           + Int(L[o111]) * tr  * tg  * tb
+                        ng = Int(L[o000 + 1]) * itr * itg * itb
+                           + Int(L[o100 + 1]) * tr  * itg * itb
+                           + Int(L[o010 + 1]) * itr * tg  * itb
+                           + Int(L[o110 + 1]) * tr  * tg  * itb
+                           + Int(L[o001 + 1]) * itr * itg * tb
+                           + Int(L[o101 + 1]) * tr  * itg * tb
+                           + Int(L[o011 + 1]) * itr * tg  * tb
+                           + Int(L[o111 + 1]) * tr  * tg  * tb
+                        nb = Int(L[o000 + 2]) * itr * itg * itb
+                           + Int(L[o100 + 2]) * tr  * itg * itb
+                           + Int(L[o010 + 2]) * itr * tg  * itb
+                           + Int(L[o110 + 2]) * tr  * tg  * itb
+                           + Int(L[o001 + 2]) * itr * itg * tb
+                           + Int(L[o101 + 2]) * tr  * itg * tb
+                           + Int(L[o011 + 2]) * itr * tg  * tb
+                           + Int(L[o111 + 2]) * tr  * tg  * tb
+
+                        // 8 个权重乘积 × 65536³ = 2^96，除回去
+                        let outR = (nr >> 48) & 0xFF
+                        let outG = (ng >> 48) & 0xFF
+                        let outB = (nb >> 48) & 0xFF
+
+                        if blendFix >= 256 {
+                            p[idx]     = UInt8(min(255, outR))
+                            p[idx + 1] = UInt8(min(255, outG))
+                            p[idx + 2] = UInt8(min(255, outB))
+                        } else {
+                            p[idx]     = UInt8((r * (256 - blendFix) + outR * blendFix) >> 8)
+                            p[idx + 1] = UInt8((g * (256 - blendFix) + outG * blendFix) >> 8)
+                            p[idx + 2] = UInt8((b * (256 - blendFix) + outB * blendFix) >> 8)
+                        }
+
+                        idx += 4
+                    }
+                }
+            }
+        }
+
+        guard let outCtx = CGContext(
+            data: &src, width: w, height: h, bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow, space: cs,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let outCG = outCtx.makeImage() else { return image }
+
+        return UIImage(cgImage: outCG, scale: 1, orientation: .up)
     }
 }

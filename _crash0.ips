@@ -1,0 +1,134 @@
+{"app_name":"LeicaLab","timestamp":"2026-11-24 06:50:37.00 +0800","app_version":"1.0","slice_uuid":"61479ec4-66e4-38f9-af38-13aec099c3da","build_version":"1","platform":2,"bundleID":"com.local.leicalab","share_with_app_devs":0,"is_first_party":1,"bug_type":"309","os_version":"iPhone OS 15.8.8 (19H422)","incident_id":"D019ACBD-DDAA-4483-A87C-4CDBF4B6AEF7","name":"LeicaLab"}
+{
+  "uptime" : 330000,
+  "procLaunch" : "2026-11-24 06:50:37.4118 +0800",
+  "procRole" : "Foreground",
+  "version" : 2,
+  "userID" : 501,
+  "deployVersion" : 210,
+  "modelCode" : "iPhone8,4",
+  "procStartAbsTime" : 7965921487352,
+  "coalitionID" : 4361,
+  "osVersion" : {
+    "isEmbedded" : true,
+    "train" : "iPhone OS 15.8.8",
+    "releaseType" : "User",
+    "build" : "19H422"
+  },
+  "captureTime" : "2026-11-24 06:50:37.4914 +0800",
+  "incident" : "D019ACBD-DDAA-4483-A87C-4CDBF4B6AEF7",
+  "bug_type" : "309",
+  "pid" : 32548,
+  "procExitAbsTime" : 7965923180210,
+  "cpuType" : "ARM-64",
+  "procName" : "LeicaLab",
+  "procPath" : "\/private\/preboot\/79688E8F0E02446F454E70F92E478A15CBFF53BD\/jb-uhhLyVUB\/procursus\/Applications\/LeicaLab.app\/LeicaLab",
+  "bundleInfo" : {"CFBundleShortVersionString":"1.0","CFBundleVersion":"1","CFBundleIdentifier":"com.local.leicalab"},
+  "storeInfo" : {"deviceIdentifierForVendor":"8F41C660-E50A-4DB3-979D-7FEFFCAA23C0"},
+  "parentProc" : "launchd",
+  "parentPid" : 1,
+  "coalitionName" : "com.local.leicalab",
+  "crashReporterKey" : "4c11bd01b16bf98dc94a09bb0ba9344130be857f",
+  "basebandVersion" : "13.00.00",
+  "vmRegionInfo" : "0 is not in any region.  Bytes before following region: 4369367040\n      REGION TYPE                 START - END      [ VSIZE] PRT\/MAX SHRMOD  REGION DETAIL\n      UNUSED SPACE AT START\n--->  \n      __TEXT                   1046f4000-104744000 [  320K] r-x\/r-x SM=COW  ....app\/LeicaLab",
+  "isCorpse" : 1,
+  "exception" : {"codes":"0x0000000000000001, 0x0000000000000000","rawCodes":[1,0],"type":"EXC_BAD_ACCESS","signal":"SIGSEGV","subtype":"KERN_INVALID_ADDRESS at 0x0000000000000000"},
+  "termination" : {"flags":0,"code":11,"namespace":"SIGNAL","indicator":"Segmentation fault: 11","byProc":"exc handler","byPid":32548},
+  "vmregioninfo" : "0 is not in any region.  Bytes before following region: 4369367040\n      REGION TYPE                 START - END      [ VSIZE] PRT\/MAX SHRMOD  REGION DETAIL\n      UNUSED SPACE AT START\n--->  \n      __TEXT                   1046f4000-104744000 [  320K] r-x\/r-x SM=COW  ....app\/LeicaLab",
+  "faultingThread" : 0,
+  "threads" : [{"triggered":true,"id":961633,"threadState":{"x":[{"value":0},{"value":2929},{"value":0},{"value":4371935362},{"value":42},{"value":4294967344},{"value":0},{"value":1},{"value":0},{"value":4848669954255749277},{"value":72057598332895232},{"value":144115188344291464},{"value":705500656743747588},{"value":0},{"value":2199023325184},{"value":4294967296},{"value":7995213856,"symbolLocation":0,"symbol":"_platform_memmove"},{"value":0},{"value":0},{"value":4372594240},{"value":10764163584},{"value":4372594724},{"value":0},{"value":1},{"value":0},{"value":10779904448},{"value":0},{"value":1},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6623079192},"cpsr":{"value":1610612736},"fp":{"value":6097514448},"sp":{"value":6097513696},"esr":{"value":2181038086,"description":"(Instruction Abort) Translation fault"},"pc":{"value":0},"far":{"value":0}},"queue":"com.apple.main-thread","frames":[{"imageOffset":0,"imageIndex":0},{"imageOffset":1875628,"symbol":"CI::GLContext::GLContext(CI::GLContext::ShareContextInfo, CGColorSpace*, CGColorSpace*, CI::PixelFormat, bool, unsigned long, bool, bool)","symbolLocation":496,"imageIndex":1},{"imageOffset":1875704,"symbol":"CI::GLContext::GLContext(CI::GLContext::ShareContextInfo, CGColorSpace*, CGColorSpace*, CI::PixelFormat, bool, unsigned long, bool, bool)","symbolLocation":24,"imageIndex":1},{"imageOffset":329488,"symbol":"+[CIContext(Internal) internalContextWithEAGLContext:options:]","symbolLocation":628,"imageIndex":1},{"imageOffset":33604,"symbol":"-[CIContext initWithOptions:]","symbolLocation":596,"imageIndex":1},{"imageOffset":200224,"symbol":"LUTProcessor.().init()","symbolLocation":672,"imageIndex":2},{"imageOffset":199532,"symbol":"one-time initialization function for shared","symbolLocation":36,"imageIndex":2},{"imageOffset":409748,"symbol":"_dispatch_client_callout","symbolLocation":16,"imageIndex":3},{"imageOffset":23244,"symbol":"_dispatch_once_callout","symbolLocation":28,"imageIndex":3},{"imageOffset":1184204,"symbol":"static App.main()","symbolLocation":80,"imageIndex":4},{"imageOffset":209460,"symbol":"main","symbolLocation":36,"imageIndex":2},{"imageOffset":99536,"symbol":"start","symbolLocation":444,"imageIndex":5}]},{"id":961634,"frames":[{"imageOffset":6436,"symbol":"start_wqthread","symbolLocation":0,"imageIndex":6}]}],
+  "usedImages" : [
+  {
+    "size" : 0,
+    "source" : "A",
+    "base" : 0,
+    "uuid" : "00000000-0000-0000-0000-000000000000"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 6621204480,
+    "size" : 3346432,
+    "uuid" : "76daad82-de91-3981-a185-d393621fb6ff",
+    "path" : "\/System\/Library\/Frameworks\/CoreImage.framework\/CoreImage",
+    "name" : "CoreImage"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4369367040,
+    "size" : 327680,
+    "uuid" : "61479ec4-66e4-38f9-af38-13aec099c3da",
+    "path" : "\/private\/preboot\/79688E8F0E02446F454E70F92E478A15CBFF53BD\/jb-uhhLyVUB\/procursus\/Applications\/LeicaLab.app\/LeicaLab",
+    "name" : "LeicaLab"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 6460391424,
+    "size" : 536576,
+    "uuid" : "9ccdbde3-15e1-3a45-b330-4a5e2c3f92bd",
+    "path" : "\/usr\/lib\/system\/libdispatch.dylib",
+    "name" : "libdispatch.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 6587871232,
+    "size" : 14946304,
+    "uuid" : "a62d133a-55df-3b0d-b8de-8334d87722d0",
+    "path" : "\/System\/Library\/Frameworks\/SwiftUI.framework\/SwiftUI",
+    "name" : "SwiftUI"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4373790720,
+    "size" : 344064,
+    "uuid" : "16c8ea1a-1c77-3f4f-97a6-6ae7fb25eb29",
+    "path" : "\/cores\/usr\/lib\/dyld",
+    "name" : "dyld"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 7995260928,
+    "size" : 69632,
+    "uuid" : "a150c45a-fa09-3593-8e64-337bc555c085",
+    "path" : "\/usr\/lib\/system\/libsystem_pthread.dylib",
+    "name" : "libsystem_pthread.dylib"
+  }
+],
+  "sharedCache" : {
+  "base" : 6460063744,
+  "size" : 2323562496,
+  "uuid" : "30cea1b5-a0e8-3046-83b5-4b7285736d98"
+},
+  "vmSummary" : "ReadOnly portion of Libraries: Total=754.6M resident=0K(0%) swapped_out_or_unallocated=754.6M(100%)\nWritable regions: Total=532.0M written=0K(0%) resident=0K(0%) swapped_out=0K(0%) unallocated=532.0M(100%)\n\n                                VIRTUAL   REGION \nREGION TYPE                        SIZE    COUNT (non-coalesced) \n===========                     =======  ======= \nActivity Tracing                   256K        1 \nColorSync                           48K        2 \nKernel Alloc Once                   32K        1 \nMALLOC                           530.2M       16 \nMALLOC guard page                   64K        4 \nSTACK GUARD                         32K        2 \nStack                             1552K        2 \n__CTF                               756        1 \n__DATA                            19.5M      555 \n__DATA_CONST                      51.6M      572 \n__DATA_DIRTY                      2600K      473 \n__FONT_DATA                          4K        1 \n__GLSLBUILTINS                    1904K        1 \n__LINKEDIT                       186.4M        4 \n__OBJC_RO                         91.9M        1 \n__OBJC_RW                         3520K        1 \n__TEXT                           568.2M      577 \n__UNICODE                          592K        1 \ndyld private memory               1024K        1 \nmapped file                       29.1M        2 \nshared memory                       48K        3 \n===========                     =======  ======= \nTOTAL                              1.5G     2221 \n",
+  "legacyInfo" : {
+  "threadTriggered" : {
+    "queue" : "com.apple.main-thread"
+  }
+},
+  "trialInfo" : {
+  "rollouts" : [
+    {
+      "rolloutId" : "61030413bfe6dc472e1c980c",
+      "factorPackIds" : {
+
+      },
+      "deploymentId" : 240000489
+    },
+    {
+      "rolloutId" : "5f72dc58705eff005a46b3a9",
+      "factorPackIds" : {
+
+      },
+      "deploymentId" : 240000015
+    }
+  ],
+  "experiments" : [
+
+  ]
+}
+}
